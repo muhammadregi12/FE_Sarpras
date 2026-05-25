@@ -4,7 +4,9 @@ export const getSupplierList = async (page = 1, limit = 10) => {
   const response = await api.get("/suppliers", {
     params: { page, limit },
   });
-  return response.data.data;
+  const rows = response.data.data || [];
+  rows.meta = response.data.meta || null;
+  return rows;
 };
 
 export const getSupplierById = async (id) => {

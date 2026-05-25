@@ -6,12 +6,25 @@ import MainLayout from "../components/layouts/MainLayout";
 
 // Pages
 const Login = lazy(() => import("../pages/auth/Login"));
+const UpdatePassword = lazy(() => import("../pages/auth/UpdatePasswordMain"));
+const UpdateProfil = lazy(() => import("../pages/auth/UpdateProfilMain"));
 const Dashboard = lazy(() => import("../pages/DashboardMain"));
 const CabangMain = lazy(() => import("../pages/CabangMain"));
 const KategoriMain = lazy(() => import("../pages/KategoriMain"));
 const RuanganMain = lazy(() => import("../pages/RuanganMain"));
 const SupplierMain = lazy(() => import("../pages/SupplierMain"));
 const BarangMain = lazy(() => import("../pages/BarangMain"));
+const BarangMasukMain = lazy(() => import("../pages/BarangMasukMain"));
+const BarangKeluarMain = lazy(() => import("../pages/BarangKeluarMain"));
+const BarangMaintenanceMain = lazy(() => import("../pages/BarangMaintenanceMain"));
+const BarangRusakMain = lazy(() => import("../pages/BarangRusakMain"));
+const LaporanBarangMain = lazy(() => import("../pages/report/LaporanBarangMain"));
+const LaporanBarangMasukMain = lazy(() => import("../pages/report/LaporanBarangMasukMain"));
+const LaporanBarangKeluarMain = lazy(() => import("../pages/report/LaporanBarangKeluarMain"));
+const LaporanBarangRusakMain = lazy(() => import("../pages/report/LaporanBarangRusakMain"));
+const BarangScan = lazy(() => import("../components/feature/barang/BarangScan"));
+const RuanganScan = lazy(() => import("../components/feature/ruangan/RuanganScan"));
+const ScanManagement = lazy(() => import("../pages/qr code/ScanManagement"));
 
 // Placeholder — ganti dengan komponen nyata saat sudah dibuat
 function ComingSoon({ name }) {
@@ -38,23 +51,29 @@ export default function AppRouter() {
       <Routes>
         {/* Public */}
         <Route path="/login" element={<Login />} />
+        <Route path="/barang/scan" element={<BarangScan />} />
+        <Route path="/ruangan/scan" element={<RuanganScan />} />
 
         {/* Protected — semua pakai MainLayout */}
         <Route element={<MainLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/barang" element={<BarangMain />} />
-          <Route path="/barang-masuk" element={<ComingSoon name="Barang Masuk" />} />
-          <Route path="/barang-keluar" element={<ComingSoon name="Barang Keluar" />} />
-          <Route path="/maintenance" element={<ComingSoon name="Maintenance" />} />
-          <Route path="/barang-rusak" element={<ComingSoon name="Barang Rusak" />} />
+          <Route path="/barang-masuk" element={<BarangMasukMain />} />
+          <Route path="/barang-keluar" element={<BarangKeluarMain />} />
+          <Route path="/maintenance" element={<BarangMaintenanceMain />} />
+          <Route path="/laporan-barang" element={<LaporanBarangMain />} />
+          <Route path="/laporan/barang-masuk" element={<LaporanBarangMasukMain />} />
+          <Route path="/barang-rusak" element={<BarangRusakMain />} />
+          <Route path="/laporan/barang-keluar" element={<LaporanBarangKeluarMain />} />
+          <Route path="/laporan/barang-rusak" element={<LaporanBarangRusakMain />} />
           <Route path="/kategori" element={<KategoriMain />} />
           <Route path="/ruangan" element={<RuanganMain />} />
           <Route path="/supplier" element={<SupplierMain />} />
           <Route path="/cabang" element={<CabangMain />} />
-          <Route path="/laporan" element={<ComingSoon name="Laporan" />} />
-          <Route path="/scan" element={<ComingSoon name="Scan QR" />} />
-          <Route path="/profile" element={<ComingSoon name="Profil Saya" />} />
-          <Route path="/settings" element={<ComingSoon name="Pengaturan" />} />
+          <Route path="/scan" element={<ScanManagement />} />
+          <Route path="/profile" element={<UpdateProfil />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
+          <Route path="/update" element={<ComingSoon name="Update Profile" />} />
         </Route>
 
         {/* Fallback */}

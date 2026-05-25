@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { MdAdd, MdRefresh, MdSearch, MdStore, MdUpload } from "react-icons/md";
@@ -6,7 +6,7 @@ import { getCabangList, createCabang, updateCabang, deleteCabang, importCabang, 
 import { showToast } from "../utils/toast";
 import CabangTable from "../components/feature/cabang/CabangTable";
 import CabangModal from "../components/feature/cabang/CabangModal";
-import DeleteConfirmModal from "../components/shared/DeleteConfirmModal";
+import DeleteConfirmModal from "../components/feature/DeleteConfirmModal";
 import ImportModal from "../components/feature/ImportModal";
 
 const LIMIT_OPTIONS = [10, 25, 50, 100];
@@ -27,26 +27,6 @@ export default function CabangMain() {
   // Import Modal
   const [importModalOpen, setImportModalOpen] = useState(false);
 
-  // handler
-  const handleDelete = (id) => {
-  const item = rawData.find((d) => d.id === id);
-  setDeleteModal({ open: true, id, name: item?.name_cabang ?? null }); // <-- beda di sini
-};
-
-const handleConfirmDelete = async () => {
-  try {
-    setIsDeleting(true);
-    await deleteCabang(deleteModal.id);
-    showToast.success("Cabang berhasil dihapus");
-    setDeleteModal({ open: false, id: null, name: null });
-    fetchData();
-  } catch (error) {
-    showToast.error(error?.response?.data?.message || "Gagal menghapus data");
-  } finally {
-    setIsDeleting(false);
-  }
-};
-
   // Pagination
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -55,6 +35,45 @@ const handleConfirmDelete = async () => {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const debounceRef = useRef(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await getCabangList(page, limit);
+      const rows = Array.isArray(result) ? result : result?.data ?? [];
+      const resultMeta = Array.isArray(result) ? result.meta ?? null : result?.meta ?? null;
+
+      setRawData(rows);
+      setMeta({
+        total: resultMeta?.total ?? rows.length,
+        page: resultMeta?.page ?? page,
+        totalPages: resultMeta?.totalPages ?? 1,
+      });
+    } catch (error) {
+      showToast.error(error?.response?.data?.message || "Gagal memuat data");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit]);
+
+  const handleDelete = useCallback((id) => {
+    const item = rawData.find((d) => d.id === id);
+    setDeleteModal({ open: true, id, name: item?.name_cabang ?? null });
+  }, [rawData]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    try {
+      setIsDeleting(true);
+      await deleteCabang(deleteModal.id);
+      showToast.success("Cabang berhasil dihapus");
+      setDeleteModal({ open: false, id: null, name: null });
+      await fetchData();
+    } catch (error) {
+      showToast.error(error?.response?.data?.message || "Gagal menghapus data");
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [deleteModal.id, fetchData]);
 
   /* Debounce search input */
   useEffect(() => {
@@ -68,59 +87,40 @@ const handleConfirmDelete = async () => {
 
   /* Fetch data ketika page / limit berubah */
   useEffect(() => {
-    fetchData();
-  }, [page, limit]);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const result = await getCabangList(page, limit);
-      if (Array.isArray(result)) {
-        setRawData(result);
-        setMeta({ total: result.length, page, totalPages: 1 });
-      } else {
-        setRawData(result?.data ?? []);
-        setMeta({
-          total: result?.meta?.total ?? (result?.data?.length ?? 0),
-          page: result?.meta?.page ?? page,
-          totalPages: result?.meta?.totalPages ?? 1,
-        });
-      }
-    } catch (error) {
-      showToast.error(error?.response?.data?.message || "Gagal memuat data");
-    } finally {
-      setLoading(false);
-    }
-  };
+    const timer = setTimeout(() => fetchData(), 0);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
 
   /* Filter client-side berdasarkan debounced search */
-  const filteredData = rawData.filter((item) => {
-    if (!debouncedSearch) return true;
+  const filteredData = useMemo(() => {
+    if (!debouncedSearch) return rawData;
     const q = debouncedSearch.toLowerCase();
-    return (
-      item.kode_cabang?.toLowerCase().includes(q) ||
-      item.name_cabang?.toLowerCase().includes(q) ||
-      item.alamat?.toLowerCase().includes(q)
-    );
-  });
+    return rawData.filter((item) => {
+      return (
+        item.kode_cabang?.toLowerCase().includes(q) ||
+        item.name_cabang?.toLowerCase().includes(q) ||
+        item.alamat?.toLowerCase().includes(q)
+      );
+    });
+  }, [rawData, debouncedSearch]);
 
   /* Modal handlers */
-  const handleOpenCreate = () => {
+  const handleOpenCreate = useCallback(() => {
     setIsEdit(false);
     setSelectedData(null);
     setModalOpen(true);
-  };
+  }, []);
 
-  const handleOpenEdit = (item) => {
+  const handleOpenEdit = useCallback((item) => {
     setIsEdit(true);
     setSelectedData(item);
     setModalOpen(true);
-  };
+  }, []);
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setModalOpen(false);
     setSelectedData(null);
-  };
+  }, []);
 
   const handleSubmit = async (formData) => {
     try {
@@ -133,7 +133,7 @@ const handleConfirmDelete = async () => {
         showToast.success("Cabang berhasil ditambahkan");
       }
       handleCloseModal();
-      fetchData();
+      await fetchData();
     } catch (error) {
       showToast.error(error?.response?.data?.message || "Gagal menyimpan data");
     } finally {
@@ -141,20 +141,24 @@ const handleConfirmDelete = async () => {
     }
   };
 
-  const handleLimitChange = (newLimit) => {
+  const handleLimitChange = useCallback((newLimit) => {
     setLimit(Number(newLimit));
     setPage(1);
-  };
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  const handlePageChange = useCallback((nextPage) => {
+    setPage(nextPage);
+  }, []);
 
   const handleImportCabang = async (file) => {
-    try {
-      const response = await importCabang(file);
-      showToast.success(`${response.berhasil} cabang berhasil diimport`);
-      fetchData();
-      return response;
-    } catch (error) {
-      throw error;
-    }
+    const response = await importCabang(file);
+    showToast.success(`${response.berhasil} cabang berhasil diimport`);
+    await fetchData();
+    return response;
   };
 
   const handleDownloadTemplate = async () => {
@@ -193,7 +197,7 @@ const handleConfirmDelete = async () => {
 
         <div className="flex items-center gap-2.5">
           <button
-            onClick={fetchData}
+            onClick={handleRefresh}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 transition-all duration-150"
           >
             <MdRefresh className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -220,7 +224,7 @@ const handleConfirmDelete = async () => {
       <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden animate-[fadeUp_0.45s_cubic-bezier(0.16,1,0.3,1)_0.05s_both]">
         {/* Toolbar: search + limit */}
         <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-gray-200">
-          <div className="relative flex items-center flex-1 max-w-[360px]">
+          <div className="relative flex items-center flex-1 max-w-90">
             <MdSearch
               className={`absolute left-3 w-4 h-4 transition-colors ${
                 search ? "text-blue-600" : "text-gray-400"
@@ -296,7 +300,7 @@ const handleConfirmDelete = async () => {
             totalPages={meta.totalPages}
             total={meta.total}
             limit={limit}
-            onPageChange={setPage}
+            onPageChange={handlePageChange}
           />
         )}
       </div>
@@ -327,17 +331,6 @@ const handleConfirmDelete = async () => {
         title="Import Data Cabang"
       />
 
-      <style>{`
-        
-        @keyframes fadeDown {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }
@@ -373,7 +366,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
         <button
           disabled={page === 1}
           onClick={() => onPageChange(page - 1)}
-          className={`min-w-[32px] h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
+          className={`min-w-8 h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
             page === 1
               ? "opacity-40 cursor-not-allowed"
               : "hover:bg-gray-50"
@@ -387,7 +380,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
           <>
             <button
               onClick={() => onPageChange(1)}
-              className="min-w-[32px] h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center hover:bg-gray-50 transition-all duration-150"
+              className="min-w-8 h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center hover:bg-gray-50 transition-all duration-150"
             >
               1
             </button>
@@ -400,7 +393,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
           <button
             key={p}
             onClick={() => onPageChange(p)}
-            className={`min-w-[32px] h-8 px-2 rounded-md text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
+            className={`min-w-8 h-8 px-2 rounded-md text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
               p === page
                 ? "bg-blue-600 border-blue-600 text-white shadow-md"
                 : "border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
@@ -418,7 +411,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
             )}
             <button
               onClick={() => onPageChange(totalPages)}
-              className="min-w-[32px] h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center hover:bg-gray-50 transition-all duration-150"
+              className="min-w-8 h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center hover:bg-gray-50 transition-all duration-150"
             >
               {totalPages}
             </button>
@@ -429,7 +422,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
         <button
           disabled={page === totalPages}
           onClick={() => onPageChange(page + 1)}
-          className={`min-w-[32px] h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
+          className={`min-w-8 h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
             page === totalPages
               ? "opacity-40 cursor-not-allowed"
               : "hover:bg-gray-50"

@@ -11,6 +11,7 @@
  *  - Menggunakan Tailwind CSS
  */
 
+import { memo } from "react";
 import { MdEdit, MdDelete, MdStore, MdLocationOn } from "react-icons/md";
 
 /* ── Column definitions ── */
@@ -22,7 +23,7 @@ const COLUMNS = [
 ];
 
 /* ── Skeleton row ── */
-function SkeletonRow({ index }) {
+const SkeletonRow = memo(function SkeletonRow({ index }) {
   return (
     <tr className={`animate-[tableFadeIn_0.3s_ease_${index * 50}ms_both]`}>
       <td className="px-4 py-3 text-center"><Skel width="w-6" height="h-3" /></td>
@@ -36,16 +37,16 @@ function SkeletonRow({ index }) {
       </td>
     </tr>
   );
-}
+});
 
-function Skel({ width = "w-20", height = "h-3", rounded = "rounded-md" }) {
+const Skel = memo(function Skel({ width = "w-20", height = "h-3", rounded = "rounded-md" }) {
   return (
     <div className={`${width} ${height} ${rounded} bg-gray-200 animate-shimmer inline-block`} />
   );
-}
+});
 
 /* ── Action button ── */
-function ActionBtn({ onClick, colorClass, hoverClass, icon: Icon, label }) {
+const ActionBtn = memo(function ActionBtn({ onClick, colorClass, hoverClass, icon: Icon, label }) {
   return (
     <button
       onClick={onClick}
@@ -55,10 +56,10 @@ function ActionBtn({ onClick, colorClass, hoverClass, icon: Icon, label }) {
       <Icon size={14} />
     </button>
   );
-}
+});
 
 /* ── Main Export ── */
-export default function CabangTable({ data, onEdit, onDelete, isLoading, page = 1, limit = 10 }) {
+const CabangTable = memo(function CabangTable({ data, onEdit, onDelete, isLoading, page = 1, limit = 10 }) {
   return (
     <div className="w-full">
       <div className="overflow-x-auto">
@@ -121,13 +122,14 @@ export default function CabangTable({ data, onEdit, onDelete, isLoading, page = 
         </table>
       </div>
 
-      <style>{TABLE_CSS}</style>
     </div>
   );
-}
+});
+
+export default CabangTable;
 
 /* ── Data Row Component ── */
-function DataRow({ item, rowNum, idx, onEdit, onDelete }) {
+const DataRow = memo(function DataRow({ item, rowNum, idx, onEdit, onDelete }) {
   return (
     <tr
       className="border-b border-gray-100 hover:bg-gray-50/80 transition-colors duration-150"
@@ -179,21 +181,4 @@ function DataRow({ item, rowNum, idx, onEdit, onDelete }) {
       </td>
     </tr>
   );
-}
-
-const TABLE_CSS = `
-
-@keyframes tableFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes shimmer {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.8; }
-}
-
-.animate-shimmer {
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-`;
+});

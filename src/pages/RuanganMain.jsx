@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { MdAdd, MdRefresh, MdSearch, MdMeetingRoom } from "react-icons/md";
-import { getRuanganList, createRuangan, updateRuangan, deleteRuangan } from "../services/ruanganService";
+import { getRuanganList, createRuangan, updateRuangan, deleteRuangan, downloadQRCodeRuangan, getAllQRCodes, getQRCodeUrl, exportPDFDetailRuangan } from "../services/ruanganService";
 import { showToast } from "../utils/toast";
 import RuanganTable from "../components/feature/ruangan/RuanganTable";
 import RuanganModal from "../components/feature/ruangan/RuanganModal";
-import DeleteConfirmModal from "../components/shared/DeleteConfirmModal";
+import DeleteConfirmModal from "../components/feature/DeleteConfirmModal";
 
 
 const LIMIT_OPTIONS = [10, 25, 50, 100];
@@ -19,6 +19,8 @@ export default function RuanganMain() {
   const [isEdit, setIsEdit] = useState(false);
   const [selectedData, setSelectedData] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [qrPreview, setQrPreview] = useState(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   // delete confirmation
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null, name: null });
@@ -43,60 +45,61 @@ export default function RuanganMain() {
     return () => clearTimeout(debounceRef.current);
   }, [search]);
 
-  /* Fetch data ketika page / limit berubah */
-  useEffect(() => {
-    fetchData();
-  }, [page, limit]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const result = await getRuanganList(page, limit);
-      if (Array.isArray(result)) {
-        setRawData(result);
-        setMeta({ total: result.length, page, totalPages: 1 });
-      } else {
-        setRawData(result?.data ?? []);
-        setMeta({
-          total: result?.meta?.total ?? (result?.data?.length ?? 0),
-          page: result?.meta?.page ?? page,
-          totalPages: result?.meta?.totalPages ?? 1,
-        });
-      }
-    } catch (error) {
-      showToast.error(error?.response?.data?.message || "Gagal memuat data");
+      const rows = Array.isArray(result) ? result : result?.data ?? [];
+      const resultMeta = Array.isArray(result) ? result.meta ?? null : result?.meta ?? null;
+
+      setRawData(rows);
+      setMeta({
+        total: resultMeta?.total ?? rows.length,
+        page: resultMeta?.page ?? page,
+        totalPages: resultMeta?.totalPages ?? 1,
+      });
+    } catch (err) {
+      showToast.error(err?.response?.data?.message || "Gagal memuat data");
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit]);
+
+  /* Fetch data ketika page / limit berubah */
+  useEffect(() => {
+    const t = setTimeout(() => fetchData(), 0);
+    return () => clearTimeout(t);
+  }, [fetchData]);
 
   /* Filter client-side berdasarkan debounced search */
-  const filteredData = rawData.filter((item) => {
-    if (!debouncedSearch) return true;
+  const filteredData = useMemo(() => {
+    if (!debouncedSearch) return rawData;
     const q = debouncedSearch.toLowerCase();
-    return (
-      item.kode_ruangan?.toLowerCase().includes(q) ||
-      item.name_ruangan?.toLowerCase().includes(q)
-    );
-  });
+    return rawData.filter((item) => {
+      return (
+        item.kode_ruangan?.toLowerCase().includes(q) ||
+        item.name_ruangan?.toLowerCase().includes(q)
+      );
+    });
+  }, [rawData, debouncedSearch]);
 
   /* Modal handlers */
-  const handleOpenCreate = () => {
+  const handleOpenCreate = useCallback(() => {
     setIsEdit(false);
     setSelectedData(null);
     setModalOpen(true);
-  };
+  }, []);
 
-  const handleOpenEdit = (item) => {
+  const handleOpenEdit = useCallback((item) => {
     setIsEdit(true);
     setSelectedData(item);
     setModalOpen(true);
-  };
+  }, []);
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setModalOpen(false);
     setSelectedData(null);
-  };
+  }, []);
 
   const handleSubmit = async (formData) => {
     try {
@@ -109,7 +112,7 @@ export default function RuanganMain() {
         showToast.success("Ruangan berhasil ditambahkan");
       }
       handleCloseModal();
-      fetchData();
+      await fetchData();
     } catch (error) {
       showToast.error(error?.response?.data?.message || "Gagal menyimpan data");
     } finally {
@@ -117,29 +120,37 @@ export default function RuanganMain() {
     }
   };
 
-  const handleDelete = (id) => {
-  const item = rawData.find((d) => d.id === id);
-  setDeleteModal({ open: true, id, name: item?.name_ruangan ?? null });
-};
+  const handleDelete = useCallback((id) => {
+    const item = rawData.find((d) => d.id === id);
+    setDeleteModal({ open: true, id, name: item?.name_ruangan ?? null });
+  }, [rawData]);
 
-  const handleConfirmDelete = async () => {
-  try {
-    setIsDeleting(true);
-    await deleteRuangan(deleteModal.id);
-    showToast.success("Ruangan berhasil dihapus");
-    setDeleteModal({ open: false, id: null, name: null });
-    fetchData();
-  } catch (error) {
-    showToast.error(error?.response?.data?.message || "Gagal menghapus data");
-  } finally {
-    setIsDeleting(false);
-  }
-};
+  const handleConfirmDelete = useCallback(async () => {
+    try {
+      setIsDeleting(true);
+      await deleteRuangan(deleteModal.id);
+      showToast.success("Ruangan berhasil dihapus");
+      setDeleteModal({ open: false, id: null, name: null });
+      await fetchData();
+    } catch (error) {
+      showToast.error(error?.response?.data?.message || "Gagal menghapus data");
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [deleteModal.id, fetchData]);
 
-  const handleLimitChange = (newLimit) => {
+  const handleLimitChange = useCallback((newLimit) => {
     setLimit(Number(newLimit));
     setPage(1);
-  };
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  const handlePageChange = useCallback((nextPage) => {
+    setPage(nextPage);
+  }, []);
 
   return (
     <div className="min-h-full p-6 bg-white font-['Sora']">
@@ -167,11 +178,43 @@ export default function RuanganMain() {
 
         <div className="flex items-center gap-2.5">
           <button
-            onClick={fetchData}
+            onClick={handleRefresh}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 transition-all duration-150"
           >
             <MdRefresh className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                setDownloadingAll(true);
+                const res = await getAllQRCodes();
+                const arr = res?.data ?? [];
+                for (const r of arr) {
+                  const base64 = r.qr_base64;
+                  if (!base64) continue;
+                  const blob = await (await fetch(base64)).blob();
+                  const filename = `qr-ruangan-${r.kode_ruangan || r.id}.png`;
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                  await new Promise((res) => setTimeout(res, 150));
+                }
+              } catch (err) {
+                showToast.error(err?.message || "Gagal mengunduh semua QR");
+              } finally {
+                setDownloadingAll(false);
+              }
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-green-600 hover:bg-green-700 shadow-md transition-all duration-150"
+          >
+            <MdMeetingRoom className="w-4 h-4" />
+            {downloadingAll ? "Mengunduh..." : "Download Semua QR"}
           </button>
           <button
             onClick={handleOpenCreate}
@@ -187,7 +230,7 @@ export default function RuanganMain() {
       <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden animate-[fadeUp_0.45s_cubic-bezier(0.16,1,0.3,1)_0.05s_both]">
         {/* Toolbar: search + limit */}
         <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-gray-200">
-          <div className="relative flex items-center flex-1 max-w-[360px]">
+          <div className="relative flex items-center flex-1 max-w-90">
             <MdSearch
               className={`absolute left-3 w-4 h-4 transition-colors ${
                 search ? "text-blue-600" : "text-gray-400"
@@ -251,10 +294,61 @@ export default function RuanganMain() {
           data={filteredData}
           onEdit={handleOpenEdit}
           onDelete={handleDelete}
+          onPreviewQR={(item) => {
+            const src = getQRCodeUrl(item.id);
+            setQrPreview({ src, kode: item.kode_ruangan, id: item.id });
+          }}
+          onDownloadQR={async (item) => {
+            try {
+              showToast.success("Menyiapkan unduhan...");
+              const blob = await downloadQRCodeRuangan(item.id);
+              const filename = `qr-ruangan-${item.kode_ruangan || item.id}.png`;
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+              showToast.success("QR berhasil diunduh");
+            } catch (err) {
+              showToast.error(err?.message || "Gagal mengunduh QR");
+            }
+          }}
+          onExportPDF={async (item) => {
+            try {
+              const blob = await exportPDFDetailRuangan(item.id);
+              const filename = `inventaris-${item.kode_ruangan || item.id}.pdf`;
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+            } catch (err) {
+              showToast.error(err?.message || "Gagal mengekspor PDF");
+            }
+          }}
           isLoading={loading}
           page={page}
           limit={limit}
         />
+
+        {/* QR Preview Modal */}
+        {qrPreview && (
+          <div
+            onClick={() => setQrPreview(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          >
+            <div className="bg-white p-4 rounded-2xl">
+              <h3 className="text-sm font-bold mb-3">QR: {qrPreview.kode}</h3>
+              <img src={qrPreview.src} alt={qrPreview.kode} className="w-72 h-72 object-contain" />
+            </div>
+          </div>
+        )}
 
         {/* Pagination */}
         {!loading && filteredData.length > 0 && !debouncedSearch && (
@@ -263,7 +357,7 @@ export default function RuanganMain() {
             totalPages={meta.totalPages}
             total={meta.total}
             limit={limit}
-            onPageChange={setPage}
+            onPageChange={handlePageChange}
           />
         )}
       </div>
@@ -286,17 +380,6 @@ export default function RuanganMain() {
         isLoading={isDeleting}
       />
 
-      <style>{`
-        
-        @keyframes fadeDown {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }
@@ -332,7 +415,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
         <button
           disabled={page === 1}
           onClick={() => onPageChange(page - 1)}
-          className={`min-w-[32px] h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
+          className={`min-w-8 h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
             page === 1
               ? "opacity-40 cursor-not-allowed"
               : "hover:bg-gray-50"
@@ -346,7 +429,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
           <>
             <button
               onClick={() => onPageChange(1)}
-              className="min-w-[32px] h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center hover:bg-gray-50 transition-all duration-150"
+              className="min-w-8 h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center hover:bg-gray-50 transition-all duration-150"
             >
               1
             </button>
@@ -359,7 +442,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
           <button
             key={p}
             onClick={() => onPageChange(p)}
-            className={`min-w-[32px] h-8 px-2 rounded-md text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
+            className={`min-w-8 h-8 px-2 rounded-md text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
               p === page
                 ? "bg-blue-600 border-blue-600 text-white shadow-md"
                 : "border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
@@ -377,7 +460,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
             )}
             <button
               onClick={() => onPageChange(totalPages)}
-              className="min-w-[32px] h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center hover:bg-gray-50 transition-all duration-150"
+              className="min-w-8 h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center hover:bg-gray-50 transition-all duration-150"
             >
               {totalPages}
             </button>
@@ -388,7 +471,7 @@ function PaginationBar({ page, totalPages, total, limit, onPageChange }) {
         <button
           disabled={page === totalPages}
           onClick={() => onPageChange(page + 1)}
-          className={`min-w-[32px] h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
+          className={`min-w-8 h-8 px-2 rounded-md border border-gray-200 bg-white text-gray-500 text-xs font-semibold flex items-center justify-center transition-all duration-150 ${
             page === totalPages
               ? "opacity-40 cursor-not-allowed"
               : "hover:bg-gray-50"

@@ -1,5 +1,6 @@
 import { useForm } from "react-hook-form";
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, memo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   MdClose, MdCheck, MdErrorOutline, MdAutorenew, MdInfo,
   MdInventory, MdCategory, MdMeetingRoom, MdStore,
@@ -9,13 +10,15 @@ import {
 import { getRuanganList } from "../../../services/ruanganService";
 import { getKategoriList } from "../../../services/kategoriService";
 import { getCabangList } from "../../../services/cabangService";
+import { getServerBaseUrl } from "../../../services/serverUrl";
 
+// FIX 1: Cache dropdown di module level dengan TTL — persisten antar buka/tutup modal
+const DROPDOWN_TTL = 10 * 60 * 1000; // 10 menit
 const dropdownCache = {
   ruangan: null,
   kategori: null,
   cabang: null,
 };
-
 const dropdownPromises = {
   ruangan: null,
   kategori: null,
@@ -23,21 +26,24 @@ const dropdownPromises = {
 };
 
 const getCachedDropdownList = async (key, loader) => {
-  if (dropdownCache[key]) {
-    return dropdownCache[key];
+  const cached = dropdownCache[key];
+  // FIX 2: Cek TTL cache agar tidak pakai data basi selamanya
+  if (cached && Date.now() - cached.timestamp < DROPDOWN_TTL) {
+    return cached.data;
   }
-
   if (!dropdownPromises[key]) {
     dropdownPromises[key] = loader()
       .then((result) => {
-        dropdownCache[key] = Array.isArray(result) ? result : [];
-        return dropdownCache[key];
+        dropdownCache[key] = {
+          data: Array.isArray(result) ? result : [],
+          timestamp: Date.now(),
+        };
+        return dropdownCache[key].data;
       })
       .finally(() => {
         dropdownPromises[key] = null;
       });
   }
-
   return dropdownPromises[key];
 };
 
@@ -48,12 +54,35 @@ const SATUAN_OPTIONS = [
   "Dus", "Karton", "Pak", "Lusin",
 ];
 
-/* ── Input Field Component ── */
-const Field = memo(function Field({ label, icon: Icon, register: reg, name, rules, error, type = "text", placeholder, disabled, options = null }) {
+// FIX 4: Pisah komponen Field focus state ke dalam Field sendiri (sudah ada),
+// tapi perbaiki: Icon tidak perlu re-render class string jika belum berubah
+const Field = memo(function Field({
+  label, icon: Icon, register: reg, name, rules, error,
+  type = "text", placeholder, disabled, options = null,
+}) {
   const [focused, setFocused] = useState(false);
   const hasError = !!error;
   const isSelect = options !== null;
   const isTextarea = type === "textarea";
+
+  const inputClass = `w-full py-2.5 pl-9 pr-3 text-sm bg-gray-50 rounded-lg outline-none transition-all duration-200 ${
+    hasError
+      ? "border-2 border-red-500 focus:border-red-500"
+      : focused
+      ? "border border-blue-500"
+      : "border border-gray-200"
+  } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`;
+
+  const focusStyle = focused && !hasError
+    ? { boxShadow: "0 0 0 3px rgba(59,130,246,0.1)" }
+    : undefined;
+
+  const handlers = {
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
+    disabled,
+    style: focusStyle,
+  };
 
   return (
     <div className="mb-5">
@@ -61,76 +90,44 @@ const Field = memo(function Field({ label, icon: Icon, register: reg, name, rule
         {label} {rules?.required && <span className="text-red-500">*</span>}
       </label>
       <div className="relative">
-        <Icon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${
-          focused ? "text-blue-600" : hasError ? "text-red-500" : "text-gray-400"
-        }`} />
-
+        <Icon
+          className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${
+            focused ? "text-blue-600" : hasError ? "text-red-500" : "text-gray-400"
+          }`}
+        />
         {isSelect ? (
           <select
             {...reg(name, rules)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            disabled={disabled}
-            className={`w-full py-2.5 pl-9 pr-3 text-sm bg-gray-50 rounded-lg outline-none transition-all duration-200 appearance-none ${
-              hasError
-                ? "border-2 border-red-500 focus:border-red-500"
-                : focused
-                ? "border border-blue-500"
-                : "border border-gray-200"
-            } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
-            style={{
-              boxShadow: focused && !hasError ? "0 0 0 3px rgba(59,130,246,0.1)" : "none",
-            }}
+            {...handlers}
+            className={`${inputClass} appearance-none`}
           >
             <option value="">-- Pilih {label} --</option>
             {options.map((opt) => (
-              <option key={opt.value || opt} value={opt.value || opt}>
-                {opt.label || opt}
+              <option key={opt.value ?? opt} value={opt.value ?? opt}>
+                {opt.label ?? opt}
               </option>
             ))}
           </select>
         ) : isTextarea ? (
           <textarea
             {...reg(name, rules)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            disabled={disabled}
+            {...handlers}
             rows={3}
             placeholder={placeholder}
-            className={`w-full py-2.5 pl-9 pr-3 text-sm bg-gray-50 rounded-lg outline-none transition-all duration-200 resize-none ${
-              hasError
-                ? "border-2 border-red-500 focus:border-red-500"
-                : focused
-                ? "border border-blue-500"
-                : "border border-gray-200"
-            } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
-            style={{
-              boxShadow: focused && !hasError ? "0 0 0 3px rgba(59,130,246,0.1)" : "none",
-            }}
+            className={`${inputClass} resize-none`}
           />
         ) : (
           <input
             type={type}
             {...reg(name, rules)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            disabled={disabled}
+            {...handlers}
             placeholder={placeholder}
-            className={`w-full py-2.5 pl-9 pr-3 text-sm bg-gray-50 rounded-lg outline-none transition-all duration-200 ${
-              hasError
-                ? "border-2 border-red-500 focus:border-red-500"
-                : focused
-                ? "border border-blue-500"
-                : "border border-gray-200"
-            } ${disabled ? "opacity-60 cursor-not-allowed" : ""} ${type === "number" ? "font-mono" : ""}`}
-            style={{
-              boxShadow: focused && !hasError ? "0 0 0 3px rgba(59,130,246,0.1)" : "none",
-            }}
+            className={`${inputClass} ${type === "number" ? "font-mono" : ""}`}
           />
         )}
       </div>
       {hasError && (
-        <div className="flex items-center gap-1.5 mt-2 animate-[errorShake_0.3s_ease]">
+        <div className="flex items-center gap-1.5 mt-2 animate-error-shake">
           <MdErrorOutline className="w-3 h-3 text-red-500 shrink-0" />
           <span className="text-[11px] text-red-500">{error.message}</span>
         </div>
@@ -139,10 +136,10 @@ const Field = memo(function Field({ label, icon: Icon, register: reg, name, rule
   );
 });
 
-/* ── Main Export ── */
 export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, isLoading }) {
   const [visible, setVisible] = useState(false);
   const [mounted, setMounted] = useState(false);
+
   const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm({
     defaultValues: {
       name: "",
@@ -163,17 +160,21 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
   const [imagePreview, setImagePreview] = useState(null);
   const [loadingSelects, setLoadingSelects] = useState(false);
 
-  const getServerBaseUrl = () => {
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
-    return apiUrl.replace(/\/api\/?$/, "") || "http://localhost:3000";
-  };
+  // FIX 5: Track apakah dropdown sudah pernah dimuat dalam lifecycle modal ini
+  // Dropdown hanya di-load ulang kalau cache kosong (sudah dihandle getCachedDropdownList)
+  const dropdownLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    const loadAndFill = async () => {
+    const loadDropdowns = async () => {
+      // FIX 6: Jika dropdown sudah di-load dan cache masih ada, skip loading indicator
+      const needsFetch =
+        !dropdownCache.ruangan || Date.now() - dropdownCache.ruangan.timestamp >= DROPDOWN_TTL;
+
+      if (needsFetch) setLoadingSelects(true);
+
       try {
-        setLoadingSelects(true);
         const [ruangan, kategori, cabang] = await Promise.all([
           getCachedDropdownList("ruangan", () => getRuanganList(1, 100)),
           getCachedDropdownList("kategori", () => getKategoriList(1, 100)),
@@ -182,26 +183,7 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
         setRuanganList(ruangan);
         setKategoriList(kategori);
         setCabangList(cabang);
-
-        if (isEdit && data) {
-          setValue("name", data.name || "");
-          setValue("kode_barang", data.kode_barang || "");
-          setValue("ruangan_id", String(data.ruangan?.id || data.ruangan_id || ""));
-          setValue("cabang_id", String(data.cabang?.id || data.cabang_id || ""));
-          setValue("kategori_id", String(data.kategori?.id || data.kategori_id || ""));
-          setValue("satuan", data.satuan || "");
-          setValue("keterangan", data.keterangan || "");
-          setValue("tahun_pengadaan", data.tahun_pengadaan || new Date().getFullYear());
-
-          if (data.image) {
-            const imgUrl = data.image.startsWith("http")
-              ? data.image
-              : `${getServerBaseUrl()}/${data.image}`;
-            setImagePreview(imgUrl);
-          } else {
-            setImagePreview(null);
-          }
-        }
+        dropdownLoadedRef.current = true;
       } catch (error) {
         console.error("Error loading dropdown data:", error);
       } finally {
@@ -209,9 +191,35 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
       }
     };
 
-    loadAndFill();
-  }, [isOpen, isEdit, data, reset, setValue]);
+    loadDropdowns();
+  }, [isOpen]); // FIX 7: Hapus isEdit, data, reset, setValue dari dependency — tidak perlu
 
+  // FIX 8: Pisah effect untuk isi form agar tidak tergabung dengan loading dropdown
+  useEffect(() => {
+    if (!isOpen || !isEdit || !data) return;
+
+    queueMicrotask(() => {
+      setValue("name", data.name || "");
+      setValue("kode_barang", data.kode_barang || "");
+      setValue("ruangan_id", String(data.ruangan?.id || data.ruangan_id || ""));
+      setValue("cabang_id", String(data.cabang?.id || data.cabang_id || ""));
+      setValue("kategori_id", String(data.kategori?.id || data.kategori_id || ""));
+      setValue("satuan", data.satuan || "");
+      setValue("keterangan", data.keterangan || "");
+      setValue("tahun_pengadaan", data.tahun_pengadaan || new Date().getFullYear());
+
+      if (data.image) {
+        const imgUrl = data.image.startsWith("http")
+          ? data.image
+          : `${getServerBaseUrl()}/${data.image}`;
+        setImagePreview(imgUrl);
+      } else {
+        setImagePreview(null);
+      }
+    });
+  }, [isOpen, isEdit, data, setValue]);
+
+  // Animation lifecycle
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -220,18 +228,23 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
     } else {
       document.body.style.overflow = "";
       requestAnimationFrame(() => setVisible(false));
-      const t = setTimeout(() => setMounted(false), 250);
+      const t = setTimeout(() => {
+        setMounted(false);
+        // FIX 9: Reset form dan preview saat modal benar-benar unmount (bukan saat close trigger)
+        reset();
+        setImagePreview(null);
+        dropdownLoadedRef.current = false;
+      }, 250);
       return () => clearTimeout(t);
     }
-  }, [isOpen]);
+  }, [isOpen, reset]);
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreview(reader.result);
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result);
+    reader.readAsDataURL(file);
   };
 
   const handleFormSubmit = (formData) => {
@@ -239,64 +252,39 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
   };
 
   const handleModalClose = () => {
-    reset();
-    setImagePreview(null);
+    if (isLoading) return;
     onClose();
   };
 
   const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget && !isLoading) handleModalClose();
+    if (e.target === e.currentTarget) handleModalClose();
   };
 
-  // Memoize dropdown options SEBELUM conditional return (React Hooks Rules)
+  // Memoize dropdown options
   const kategoriOptions = useMemo(
-    () => kategoriList.map(item => ({ value: String(item.id), label: item.name_kategori })),
+    () => kategoriList.map((item) => ({ value: String(item.id), label: item.name_kategori })),
     [kategoriList]
   );
   const ruanganOptions = useMemo(
-    () => ruanganList.map(item => ({ value: String(item.id), label: item.name_ruangan })),
+    () => ruanganList.map((item) => ({ value: String(item.id), label: item.name_ruangan })),
     [ruanganList]
   );
   const cabangOptions = useMemo(
-    () => cabangList.map(item => ({ value: String(item.id), label: item.name_cabang })),
+    () => cabangList.map((item) => ({ value: String(item.id), label: item.name_cabang })),
     [cabangList]
   );
-  const satuanOptions = useMemo(
-    () => SATUAN_OPTIONS.map(s => ({ value: s, label: s })),
-    []
-  );
+  // FIX 10: satuanOptions tidak perlu useMemo karena SATUAN_OPTIONS adalah konstanta statis
+  // useMemo justru menambah overhead. Tapi karena perlu options format, pakai constanta modul.
+  const satuanOptions = SATUAN_OPTIONS_FORMATTED;
 
   if (!mounted) return null;
 
-  return (
+  return createPortal(
     <>
-      {/* Backdrop + Modal Wrapper — satu layer, menutupi semua termasuk sidebar/header/footer */}
-      <div
-        onClick={handleBackdropClick}
-        className="fixed flex items-center justify-center p-4 font-['Sora']"
-        style={{
-          inset: 0,
-          zIndex: 999999,
-          background: "rgba(0, 0, 0, 0.6)",
-          backdropFilter: "blur(24px) brightness(0.7) saturate(0.8)",
-          WebkitBackdropFilter: "blur(24px) brightness(0.7) saturate(0.8)",
-          opacity: visible ? 1 : 0,
-          pointerEvents: visible ? "auto" : "none",
-          transition: "opacity 0.3s ease",
-        }}
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-2xl bg-white rounded-2xl overflow-hidden shadow-2xl"
-          style={{
-            border: "1px solid #e5e7eb",
-            transform: visible ? "scale(1) translateY(0)" : "scale(0.93) translateY(20px)",
-            opacity: visible ? 1 : 0,
-            transition: "transform 0.35s cubic-bezier(0.34, 1.2, 0.64, 1), opacity 0.25s ease",
-          }}
-        >
+      <div onClick={handleBackdropClick} className={`modal-backdrop ${visible ? 'visible' : ''}`}>
+        <div onClick={(e) => e.stopPropagation()} className={`modal-container ${visible ? 'visible' : ''}`}>
           {/* Header */}
-          <div className="sticky top-0 flex items-center gap-3 px-6 py-5 border-b border-gray-200 bg-white z-10">
+          <div className="modal-header sticky top-0 flex items-center gap-3 z-10">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
               <MdInventory className="w-4.5 h-4.5 text-blue-600" />
             </div>
@@ -318,10 +306,7 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
           </div>
 
           {/* Form */}
-          <form
-            onSubmit={handleSubmit(handleFormSubmit)}
-            className="p-6 bg-white max-h-[calc(90vh-80px)] overflow-y-auto"
-          >
+          <form onSubmit={handleSubmit(handleFormSubmit)} className="modal-inner-scroll">
             {/* Image Upload */}
             <div className="mb-5">
               <label className="block text-[11px] font-bold text-gray-500 mb-2 uppercase tracking-wide">
@@ -344,7 +329,7 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
                 </div>
                 {imagePreview && (
                   <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-gray-50">
-                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" loading="lazy" />
                   </div>
                 )}
               </div>
@@ -387,7 +372,6 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
               rules={{}} error={errors.keterangan}
               placeholder="Masukkan keterangan barang (opsional)" type="textarea" disabled={isLoading} />
 
-            {/* Info hint */}
             <div className="px-3 py-2.5 mb-6 rounded-lg bg-blue-50 border border-blue-200 text-xs text-gray-500 leading-relaxed flex items-start gap-3">
               <MdInfo className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
               <div>
@@ -395,7 +379,6 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
               </div>
             </div>
 
-            {/* Buttons */}
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
@@ -422,18 +405,9 @@ export default function BarangModal({ isOpen, isEdit, data, onClose, onSubmit, i
         </div>
       </div>
 
-      <style>{`
-        @keyframes errorShake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-4px); }
-          75% { transform: translateX(4px); }
-        }
-        input::placeholder, textarea::placeholder { color: #9ca3af; }
-        input:-webkit-autofill, textarea:-webkit-autofill {
-          -webkit-box-shadow: 0 0 0 100px #f9fafb inset !important;
-          -webkit-text-fill-color: #111827 !important;
-        }
-      `}</style>
     </>
-  );
+  , document.body);
 }
+
+// FIX 11: Konstanta statis di module level — tidak dibuat ulang tiap render
+const SATUAN_OPTIONS_FORMATTED = SATUAN_OPTIONS.map((s) => ({ value: s, label: s }));

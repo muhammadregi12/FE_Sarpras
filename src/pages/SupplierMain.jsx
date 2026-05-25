@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { MdAdd, MdRefresh, MdFileDownload, MdLocalShipping, MdUpload } from "react-icons/md";
+import { MdAdd, MdRefresh, MdSearch, MdFileDownload, MdLocalShipping, MdUpload } from "react-icons/md";
 import { getSupplierList, createSupplier, updateSupplier, deleteSupplier, exportSupplierPDF, exportSupplierExcel, importSupplier, downloadTemplateSupplier } from "../services/supplierService";
 import { showToast } from "../utils/toast";
 import SupplierTable from "../components/feature/supplier/SupplierTable";
 import SupplierModal from "../components/feature/supplier/SupplierModal";
-import DeleteConfirmModal from "../components/shared/DeleteConfirmModal";
+import DeleteConfirmModal from "../components/feature/DeleteConfirmModal";
 import ImportModal from "../components/feature/ImportModal";
 
 const LIMIT_OPTIONS = [10, 25, 50, 100];
@@ -32,15 +32,30 @@ export default function SupplierMain() {
   // Import Modal
   const [importModalOpen, setImportModalOpen] = useState(false);
 
-  const handleDelete = (id) => {
-  const item = rawData.find((d) => d.id === id);
-  setDeleteModal({ open: true, id, name: item?.name_supplier ?? null });
-};
-
   // Search (client-side filter pada data halaman saat ini)
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const debounceRef = useRef(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await getSupplierList(page, limit);
+      const rows = Array.isArray(result) ? result : result?.data ?? [];
+      const resultMeta = Array.isArray(result) ? result.meta ?? null : result?.meta ?? null;
+
+      setRawData(rows);
+      setMeta({
+        total: resultMeta?.total ?? rows.length,
+        page: resultMeta?.page ?? page,
+        totalPages: resultMeta?.totalPages ?? 1,
+      });
+    } catch (error) {
+      showToast.error(error?.response?.data?.message || "Gagal memuat data");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit]);
 
   /* Debounce search input */
   useEffect(() => {
@@ -52,28 +67,6 @@ export default function SupplierMain() {
     return () => clearTimeout(debounceRef.current);
   }, [search]);
 
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const result = await getSupplierList(page, limit);
-      if (Array.isArray(result)) {
-        setRawData(result);
-        setMeta({ total: result.length, page, totalPages: 1 });
-      } else {
-        setRawData(result?.data ?? []);
-        setMeta({
-          total: result?.meta?.total ?? (result?.data?.length ?? 0),
-          page: result?.meta?.page ?? page,
-          totalPages: result?.meta?.totalPages ?? 1,
-        });
-      }
-    } catch (error) {
-      showToast.error(error?.response?.data?.message || "Gagal memuat data");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit]);
-
   /* Fetch data ketika page / limit berubah */
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -84,33 +77,35 @@ export default function SupplierMain() {
   }, [fetchData]);
 
   /* Filter client-side berdasarkan debounced search */
-  const filteredData = rawData.filter((item) => {
-    if (!debouncedSearch) return true;
+  const filteredData = useMemo(() => {
+    if (!debouncedSearch) return rawData;
     const q = debouncedSearch.toLowerCase();
-    return (
-      item.nama_supplier?.toLowerCase().includes(q) ||
-      item.kontak?.toLowerCase().includes(q) ||
-      item.alamat?.toLowerCase().includes(q)
-    );
-  });
+    return rawData.filter((item) => {
+      return (
+        item.nama_supplier?.toLowerCase().includes(q) ||
+        item.kontak?.toLowerCase().includes(q) ||
+        item.alamat?.toLowerCase().includes(q)
+      );
+    });
+  }, [rawData, debouncedSearch]);
 
   /* Modal handlers */
-  const handleOpenCreate = () => {
+  const handleOpenCreate = useCallback(() => {
     setIsEdit(false);
     setSelectedData(null);
     setModalOpen(true);
-  };
+  }, []);
 
-  const handleOpenEdit = (item) => {
+  const handleOpenEdit = useCallback((item) => {
     setIsEdit(true);
     setSelectedData(item);
     setModalOpen(true);
-  };
+  }, []);
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setModalOpen(false);
     setSelectedData(null);
-  };
+  }, []);
 
   const handleSubmit = async (formData) => {
     try {
@@ -123,7 +118,7 @@ export default function SupplierMain() {
         showToast.success("Supplier berhasil ditambahkan");
       }
       handleCloseModal();
-      fetchData();
+      await fetchData();
     } catch (error) {
       showToast.error(error?.response?.data?.message || "Gagal menyimpan data");
     } finally {
@@ -131,69 +126,82 @@ export default function SupplierMain() {
     }
   };
 
-const handleConfirmDelete = async () => {
-  try {
-    setIsDeleting(true);
-    await deleteSupplier(deleteModal.id);
-    showToast.success("Supplier berhasil dihapus");
-    setDeleteModal({ open: false, id: null, name: null });
-    fetchData();
-  } catch (error) {
-    showToast.error(error?.response?.data?.message || "Gagal menghapus data");
-  } finally {
-    setIsDeleting(false);
-  }
-};
+  const handleDelete = useCallback((id) => {
+    const item = rawData.find((d) => d.id === id);
+    setDeleteModal({ open: true, id, name: item?.name_supplier ?? null });
+  }, [rawData]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    try {
+      setIsDeleting(true);
+      await deleteSupplier(deleteModal.id);
+      showToast.success("Supplier berhasil dihapus");
+      setDeleteModal({ open: false, id: null, name: null });
+      await fetchData();
+    } catch (error) {
+      showToast.error(error?.response?.data?.message || "Gagal menghapus data");
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [deleteModal.id, fetchData]);
 
   const handleExportPDF = async () => {
     try {
-      setIsExporting(prev => ({ ...prev, pdf: true }));
-      const pdfBlob = await exportSupplierPDF();
-      const url = window.URL.createObjectURL(pdfBlob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `laporan-supplier-${new Date().getTime()}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      setIsExporting((prev) => ({ ...prev, pdf: true }));
+      const blob = await exportSupplierPDF();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `supplier-${new Date().toISOString().split("T")[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
       showToast.success("PDF berhasil diunduh");
     } catch (error) {
-      showToast.error(error?.response?.data?.message || "Gagal mengunduh PDF");
+      showToast.error(error?.message || "Gagal mengekspor PDF");
     } finally {
-      setTimeout(() => setIsExporting(prev => ({ ...prev, pdf: false })), 500);
+      setIsExporting((prev) => ({ ...prev, pdf: false }));
     }
   };
 
   const handleExportExcel = async () => {
     try {
-      setIsExporting(prev => ({ ...prev, excel: true }));
-      const excelBlob = await exportSupplierExcel();
-      const url = window.URL.createObjectURL(excelBlob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `laporan-supplier-${new Date().getTime()}.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      setIsExporting((prev) => ({ ...prev, excel: true }));
+      const blob = await exportSupplierExcel();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `supplier-${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
       showToast.success("Excel berhasil diunduh");
     } catch (error) {
-      showToast.error(error?.response?.data?.message || "Gagal mengunduh Excel");
+      showToast.error(error?.message || "Gagal mengekspor Excel");
     } finally {
-      setTimeout(() => setIsExporting(prev => ({ ...prev, excel: false })), 500);
+      setIsExporting((prev) => ({ ...prev, excel: false }));
     }
   };
 
-  const handleLimitChange = (newLimit) => {
+  const handleLimitChange = useCallback((newLimit) => {
     setLimit(Number(newLimit));
     setPage(1);
-  };
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  const handlePageChange = useCallback((nextPage) => {
+    setPage(nextPage);
+  }, []);
 
   const handleImportSupplier = async (file) => {
     const response = await importSupplier(file);
     showToast.success(`${response.berhasil} supplier berhasil diimport`);
-    fetchData();
+    await fetchData();
     return response;
   };
 
@@ -276,7 +284,7 @@ const handleConfirmDelete = async () => {
 
           {/* Tombol Refresh */}
           <button
-            onClick={fetchData}
+            onClick={handleRefresh}
             className="flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 transition-all duration-150 xl:w-auto"
           >
             <MdRefresh className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -308,7 +316,7 @@ const handleConfirmDelete = async () => {
         {/* Toolbar: search + limit */}
         <div className="flex flex-col gap-3 p-3 sm:p-4 border-b border-gray-200 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative flex items-center w-full lg:max-w-90">
-            <MdFileDownload
+            <MdSearch
               className={`absolute left-3 w-4 h-4 transition-colors ${
                 search ? "text-blue-600" : "text-gray-400"
               }`}
@@ -383,7 +391,7 @@ const handleConfirmDelete = async () => {
             totalPages={meta.totalPages}
             total={meta.total}
             limit={limit}
-            onPageChange={setPage}
+            onPageChange={handlePageChange}
           />
         )}
       </div>
@@ -415,17 +423,7 @@ const handleConfirmDelete = async () => {
         isLoading={isDeleting}
       />
 
-      <style>{`
 
-        @keyframes fadeDown {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }

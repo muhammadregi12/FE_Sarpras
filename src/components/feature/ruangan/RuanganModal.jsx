@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import {
   MdClose, MdCheck, MdErrorOutline, MdAutorenew,
@@ -90,7 +91,7 @@ export default function RuanganModal({ isOpen, isEdit, data, onClose, onSubmit, 
 
   if (!mounted) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop + Modal Wrapper — satu layer, menutupi semua termasuk sidebar/header/footer */}
       <div
@@ -120,7 +121,7 @@ export default function RuanganModal({ isOpen, isEdit, data, onClose, onSubmit, 
           {/* Header */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200 bg-white">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
-              <MdMeetingRoom className="w-[18px] h-[18px] text-blue-600" />
+              <MdMeetingRoom className="w-4.5 h-4.5 text-blue-600" />
             </div>
             <div className="flex-1">
               <h2 className="text-base font-extrabold text-gray-900 m-0 tracking-tight">
@@ -135,7 +136,7 @@ export default function RuanganModal({ isOpen, isEdit, data, onClose, onSubmit, 
               disabled={isLoading}
               className="w-8 h-8 rounded-lg border border-gray-200 bg-none cursor-pointer text-gray-400 flex items-center justify-center transition-all duration-150 hover:bg-gray-100 hover:text-gray-700"
             >
-              <MdClose className="w-[18px] h-[18px]" />
+              <MdClose className="w-4.5 h-4.5" />
             </button>
           </div>
 
@@ -163,7 +164,7 @@ export default function RuanganModal({ isOpen, isEdit, data, onClose, onSubmit, 
 
             {/* Info hint */}
             <div className="px-3 py-2.5 mb-6 rounded-lg bg-blue-50 border border-blue-200 text-xs text-gray-500 leading-relaxed flex items-start gap-3">
-              <MdInfo className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+              <MdInfo className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
               <div>
                 Gunakan kode yang unik dan mudah diidentifikasi, misalnya <strong className="text-blue-600">R001</strong> atau <strong className="text-blue-600">GDG-A</strong>.
               </div>
@@ -204,17 +205,6 @@ export default function RuanganModal({ isOpen, isEdit, data, onClose, onSubmit, 
         </div>
       </div>
 
-      <style>{`
-        
-        input::placeholder {
-          color: #9ca3af;
-        }
-        
-        input:-webkit-autofill {
-          -webkit-box-shadow: 0 0 0 100px #f9fafb inset !important;
-          -webkit-text-fill-color: #111827 !important;
-        }
-      `}</style>
     </>
-  );
+  , document.body);
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import {
   MdClose, MdCheck, MdErrorOutline, MdAutorenew,
@@ -66,7 +67,7 @@ export default function KategoriModal({
 
   if (!mounted) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop + Modal Wrapper — satu layer, menutupi semua termasuk sidebar/header/footer */}
       <div
@@ -383,5 +384,5 @@ export default function KategoriModal({
         }
       `}</style>
     </>
-  );
+  , document.body);
 }

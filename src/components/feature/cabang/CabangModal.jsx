@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import {
   MdClose, MdCheck, MdErrorOutline, MdAutorenew,
@@ -109,7 +110,7 @@ export default function CabangModal({ isOpen, isEdit, data, onClose, onSubmit, i
 
   if (!mounted) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop + Modal Wrapper — satu layer, menutupi semua termasuk sidebar/header/footer */}
       <div
@@ -281,17 +282,6 @@ export default function CabangModal({ isOpen, isEdit, data, onClose, onSubmit, i
         </div>
       </div>
 
-      <style>{`
-        @keyframes modalSpin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        input::placeholder { color: #9ca3af; }
-        input:-webkit-autofill {
-          -webkit-box-shadow: 0 0 0 100px #f9fafb inset !important;
-          -webkit-text-fill-color: #111827 !important;
-        }
-      `}</style>
     </>
-  );
+  , document.body);
 }

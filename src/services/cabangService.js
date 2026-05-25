@@ -7,7 +7,9 @@ export const getCabangList = async (page = 1, limit = 10) => {
   const { data } = await api.get("/cabangs", {
     params: { page, limit },
   });
-  return data.data || [];
+  const rows = data.data || [];
+  rows.meta = data.meta || null;
+  return rows;
 };
 
 /**

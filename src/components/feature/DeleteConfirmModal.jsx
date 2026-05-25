@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { MdDeleteForever, MdClose } from "react-icons/md";
 
 export default function DeleteConfirmModal({
@@ -30,7 +31,7 @@ export default function DeleteConfirmModal({
 
   if (!mounted) return null;
 
-  return (
+  return createPortal(
     <>
       <div
         onClick={handleBackdrop}
@@ -128,5 +129,5 @@ export default function DeleteConfirmModal({
         </div>
       </div>
     </>
-  );
+  , document.body);
 }

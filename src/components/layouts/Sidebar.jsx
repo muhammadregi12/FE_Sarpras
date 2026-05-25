@@ -1,203 +1,24 @@
 import { memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
-  MdSpaceDashboard,
-  MdFolder,
-  MdInventory2,
-  MdSell,
-  MdBusiness,
-  MdStorefront,
-  MdLocalShipping,
-  MdBarChart,
-  MdQrCodeScanner,
   MdGridView,
   MdExpandMore,
   MdClose,
 } from "react-icons/md";
-
-export const navItems = [
-  {
-    group: "Utama",
-    items: [{ to: "/dashboard", label: "Dashboard", icon: MdSpaceDashboard }],
-  },
-  {
-    group: "Manajemen",
-    items: [
-      {
-        label: "Master",
-        icon: MdFolder,
-        children: [
-          { to: "/barang",   label: "Barang",   icon: MdInventory2 },
-          { to: "/kategori", label: "Kategori", icon: MdSell },
-          { to: "/ruangan",  label: "Ruangan",  icon: MdBusiness },
-          { to: "/cabang",   label: "Cabang",   icon: MdStorefront },
-          { to: "/supplier", label: "Supplier", icon: MdLocalShipping },
-        ],
-      },
-    ],
-  },
-  {
-    group: "Laporan",
-    items: [
-      { to: "/laporan", label: "Laporan", icon: MdBarChart },
-      { to: "/scan",    label: "Scan QR", icon: MdQrCodeScanner },
-    ],
-  },
-];
+import { navItems } from "../../utils/navItems";
+import "../../assets/style/sidebar.css";
 
 const masterGroup = navItems.find((group) => group.group === "Manajemen");
-const masterChildren = masterGroup?.items.find((item) => item.label === "Master")?.children ?? [];
+const masterChildren =
+  masterGroup?.items.find((item) => item.label === "Master")?.children ?? [];
 
-// ─── Styles
-const STYLES = `
-  @keyframes logoGlow {
-    0%,100% { box-shadow: 0 0 10px rgba(59,130,246,0.45); }
-    50%      { box-shadow: 0 0 22px rgba(16,185,129,0.65); }
-  }
-  @keyframes dotPulse {
-    0%,100% { opacity:1; transform:scale(1); }
-    50%      { opacity:.5; transform:scale(.7); }
-  }
-  @keyframes overlayIn {
-    from { opacity:0; }
-    to   { opacity:1; }
-  }
-  @keyframes shimmer {
-    0%   { transform:translateX(-100%); }
-    100% { transform:translateX(220%);  }
-  }
+const trackingGroup = navItems.find((group) => group.group === "Tracking");
+const trackingChildren =
+  trackingGroup?.items.find((item) => item.label === "Barang")?.children ?? [];
 
-  .sb-overlay { animation: overlayIn 0.28s ease both; }
-
-  .sb-panel {
-    transition:
-      width     0.36s cubic-bezier(0.4, 0, 0.2, 1),
-      transform 0.36s cubic-bezier(0.4, 0, 0.2, 1),
-      box-shadow 0.36s ease;
-    will-change: width, transform;
-  }
-
-  .sb-label {
-    transition: opacity 0.2s ease, transform 0.2s ease;
-    white-space: nowrap;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-  .sb-open   .sb-label { opacity:1; transform:translateX(0);    pointer-events:auto; }
-  .sb-closed .sb-label { opacity:0; transform:translateX(-8px); pointer-events:none; }
-
-  .sb-group-label {
-    transition: opacity 0.18s ease;
-    white-space: nowrap;
-    overflow: hidden;
-  }
-  .sb-open   .sb-group-label { opacity:1; }
-  .sb-closed .sb-group-label { opacity:0; }
-
-  .sb-chevron {
-    flex-shrink: 0;
-    transition: transform 0.28s ease, opacity 0.18s ease;
-  }
-  .sb-chevron.rotated    { transform: rotate(-90deg); }
-  .sb-open   .sb-chevron { opacity:1; }
-  .sb-closed .sb-chevron { opacity:0; pointer-events:none; }
-
-  .sb-children {
-    display: grid;
-    transition: grid-template-rows 0.28s ease, opacity 0.22s ease;
-  }
-  .sb-children.expanded  { grid-template-rows:1fr; opacity:1; }
-  .sb-children.collapsed { grid-template-rows:0fr; opacity:0; }
-  .sb-children > div { overflow:hidden; }
-
-  .sb-dot { animation: dotPulse 2.2s ease-in-out infinite; }
-  .sb-logo-glow { animation: logoGlow 3s ease-in-out infinite; }
-
-  .sb-link { position:relative; overflow:hidden; }
-  .sb-link::after {
-    content:'';
-    position:absolute; inset:0;
-    width:55%;
-    background:linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent);
-    transform:translateX(-100%);
-    pointer-events:none;
-  }
-  .sb-link:hover::after { animation:shimmer 0.55s ease; }
-
-  .sb-scroll::-webkit-scrollbar       { width:3px; }
-  .sb-scroll::-webkit-scrollbar-track { background:transparent; }
-  .sb-scroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:99px; }
-  .sb-scroll::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.2); }
-
-  /* ── Floating dropdown ── */
-  @keyframes dropdownIn {
-    from { opacity:0; transform:translateX(-6px) scale(0.97); }
-    to   { opacity:1; transform:translateX(0)    scale(1); }
-  }
-  .sb-dropdown {
-    position: fixed;
-    background: linear-gradient(135deg, rgba(13,21,38,0.98) 0%, rgba(9,15,30,0.98) 100%);
-    border: 1px solid rgba(59,130,246,0.25);
-    border-radius: 14px;
-    box-shadow: 0 24px 56px rgba(0,0,0,0.65), 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
-    backdrop-filter: blur(12px);
-    min-width: 200px;
-    z-index: 9999;
-    animation: dropdownIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    overflow: hidden;
-  }
-  .sb-dropdown-header {
-    padding: 10px 14px 8px 16px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .sb-dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 14px;
-    color: rgba(255,255,255,0.65);
-    text-decoration: none;
-    font-size: 13px;
-    transition: background 0.15s ease, color 0.15s ease, padding-left 0.15s ease;
-    border-left: 2px solid transparent;
-    position: relative;
-  }
-  .sb-dropdown-item:hover {
-    background: rgba(59,130,246,0.12);
-    color: rgba(255,255,255,0.9);
-    border-left-color: rgba(59,130,246,0.6);
-    padding-left: 16px;
-  }
-  .sb-dropdown-item.active {
-    background: rgba(59,130,246,0.2);
-    color: #fff;
-    border-left-color: #10b981;
-    padding-left: 16px;
-  }
-  .sb-dropdown-item.active .sb-dd-dot {
-    display: block;
-  }
-  .sb-dd-dot {
-    display: none;
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: #10b981;
-    margin-left: auto;
-    flex-shrink: 0;
-    box-shadow: 0 0 6px rgba(16,185,129,0.6);
-    animation: dotPulse 2.2s ease-in-out infinite;
-  }
-`;
-
-function injectStyles() {
-  if (typeof document !== "undefined" && !document.getElementById("sb-styles")) {
-    const el = document.createElement("style");
-    el.id = "sb-styles";
-    el.textContent = STYLES;
-    document.head.appendChild(el);
-  }
-}
+const reportGroup = navItems.find((group) => group.group === "Laporan");
+const reportChildren =
+  reportGroup?.items.find((item) => item.label === "Laporan")?.children ?? [];
 
 const activeStyle = {
   background: "linear-gradient(135deg,rgba(59,130,246,0.22) 0%,rgba(16,185,129,0.13) 100%)",
@@ -208,14 +29,18 @@ const idleStyle = { background: "transparent", border: "1px solid transparent" }
 
 // ─── Component ────────────────────────────────────────────────
 function Sidebar({ open, onClose, profile }) {
-  injectStyles();
+  // styles are imported from ../../assets/style/sidebar.css
 
-  const location  = useLocation();
-  const [masterOpen, setMasterOpen] = useState(true);
+  const location = useLocation();
+  const [masterOpen, setMasterOpen] = useState(false);
+  const [trackingOpen, setTrackingOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [showMasterDropdown, setShowMasterDropdown] = useState(false);
+  const [showTrackingDropdown, setShowTrackingDropdown] = useState(false);
+  const [showReportDropdown, setShowReportDropdown] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const [dropdownType, setDropdownType] = useState("master");
 
-  // Reactive isDesktop — updates on resize
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 1024
   );
@@ -227,28 +52,61 @@ function Sidebar({ open, onClose, profile }) {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  const masterRef        = useRef(null);
-  const dropdownRef      = useRef(null);
+  const masterRef = useRef(null);
+  const trackingRef = useRef(null);
+  const reportRef = useRef(null);
+  const dropdownRef = useRef(null);
 
   const closedWidth = isDesktop ? 72 : 0;
 
+  const isPathActive = useCallback((targetPath) => {
+    return (
+      location.pathname === targetPath ||
+      location.pathname.startsWith(`${targetPath}/`)
+    );
+  }, [location.pathname]);
+
   const isMasterActive = useMemo(
-    () => masterChildren.some((child) => location.pathname.startsWith(child.to)),
-    [location.pathname]
+    () => masterChildren.some((child) => isPathActive(child.to)),
+    [isPathActive]
   );
 
-  // ── Compute dropdown position ──────────────────────────────
-  const calcDropdownPos = useCallback(() => {
-    if (!masterRef.current) return;
-    const rect = masterRef.current.getBoundingClientRect();
+  const isTrackingActive = useMemo(
+    () => trackingChildren.some((child) => isPathActive(child.to)),
+    [isPathActive]
+  );
+
+  const isReportActive = useMemo(
+    () => reportChildren.some((child) => isPathActive(child.to)),
+    [isPathActive]
+  );
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      if (isMasterActive) {
+        setMasterOpen(true);
+      }
+
+      if (isTrackingActive) {
+        setTrackingOpen(true);
+      }
+
+      if (isReportActive) {
+        setReportOpen(true);
+      }
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [isMasterActive, isTrackingActive, isReportActive]);
+
+  const calcDropdownPos = useCallback((refEl) => {
+    if (!refEl) return;
+    const rect = refEl.getBoundingClientRect();
     const dropH = dropdownRef.current?.offsetHeight ?? 280;
     const margin = 8;
 
-    // Left = collapsed sidebar width (72px) + small gap
-    // Don't use rect.right — the inner div is 256px wide, rect.right would be 256+
     const left = 72 + margin;
 
-    // Vertically align with the trigger button; clamp to viewport
     let top = rect.top;
     const maxTop = window.innerHeight - dropH - margin;
     top = Math.max(margin, Math.min(top, maxTop));
@@ -256,71 +114,173 @@ function Sidebar({ open, onClose, profile }) {
     setDropdownPos({ top, left });
   }, []);
 
-  // ── Close on route change ──────────────────────────────────
   useEffect(() => {
     if (window.innerWidth < 1024) onClose?.();
-    setShowMasterDropdown(false);
-  }, [location.pathname]);
+    const raf = requestAnimationFrame(() => {
+      setShowMasterDropdown(false);
+      setShowTrackingDropdown(false);
+      setShowReportDropdown(false);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [location.pathname, onClose]);
 
-  // ── Body scroll lock on mobile ─────────────────────────────
   useEffect(() => {
-    document.body.style.overflow =
-      open && !isDesktop ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    document.body.style.overflow = open && !isDesktop ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open, isDesktop]);
 
-  // ── Hide dropdown when sidebar opens or screen goes mobile ─
   useEffect(() => {
-    if (open || !isDesktop) setShowMasterDropdown(false);
+    if (open || !isDesktop) {
+      const raf = requestAnimationFrame(() => {
+        setShowMasterDropdown(false);
+        setShowTrackingDropdown(false);
+        setShowReportDropdown(false);
+      });
+      return () => cancelAnimationFrame(raf);
+    }
   }, [open, isDesktop]);
 
-  // ── Click-outside closes dropdown ─────────────────────────
   useEffect(() => {
-    if (!showMasterDropdown) return;
+    const activeDropdown = showMasterDropdown
+      ? "master"
+      : showTrackingDropdown
+        ? "tracking"
+        : showReportDropdown
+          ? "report"
+        : null;
+
+    if (!activeDropdown) return;
+
     const handler = (e) => {
       if (
         masterRef.current?.contains(e.target) ||
+        trackingRef.current?.contains(e.target) ||
+        reportRef.current?.contains(e.target) ||
         dropdownRef.current?.contains(e.target)
-      ) return;
+      ) {
+        return;
+      }
       setShowMasterDropdown(false);
+      setShowTrackingDropdown(false);
+      setShowReportDropdown(false);
     };
+
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showMasterDropdown]);
+  }, [showMasterDropdown, showTrackingDropdown, showReportDropdown]);
 
-  // ── Keep position synced while dropdown is open ────────────
   useEffect(() => {
-    if (!showMasterDropdown) return;
-    // Initial calc after paint so we have real height
-    const raf = requestAnimationFrame(calcDropdownPos);
-    window.addEventListener("resize",  calcDropdownPos);
-    window.addEventListener("scroll",  calcDropdownPos, true);
+    const activeDropdown = showMasterDropdown
+      ? "master"
+      : showTrackingDropdown
+        ? "tracking"
+        : showReportDropdown
+          ? "report"
+        : null;
+
+    if (!activeDropdown) return;
+
+    const refEl =
+      activeDropdown === "master"
+        ? masterRef.current
+        : activeDropdown === "tracking"
+          ? trackingRef.current
+          : reportRef.current;
+
+    const raf = requestAnimationFrame(() => calcDropdownPos(refEl));
+    window.addEventListener("resize", () => calcDropdownPos(refEl));
+    window.addEventListener("scroll", () => calcDropdownPos(refEl), true);
+
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("resize",  calcDropdownPos);
-      window.removeEventListener("scroll",  calcDropdownPos, true);
+      window.removeEventListener("resize", () => calcDropdownPos(refEl));
+      window.removeEventListener("scroll", () => calcDropdownPos(refEl), true);
     };
-  }, [showMasterDropdown, calcDropdownPos]);
+  }, [showMasterDropdown, showTrackingDropdown, showReportDropdown, calcDropdownPos]);
 
-  // ── Toggle handler for the Master button ──────────────────
-  const handleMasterClick = () => {
-    if (open) {
-      // Sidebar expanded → use in-place accordion
-      setMasterOpen((v) => !v);
-    } else if (isDesktop) {
-      // Sidebar collapsed on desktop → floating dropdown
-      if (!showMasterDropdown) {
-        calcDropdownPos();
-        setShowMasterDropdown(true);
-      } else {
-        setShowMasterDropdown(false);
+  const handleParentClick = (type) => {
+    if (type === "master") {
+      if (open) {
+        if (isMasterActive) {
+          setMasterOpen(true);
+          return;
+        }
+
+        setMasterOpen((v) => !v);
+      } else if (isDesktop) {
+        if (!showMasterDropdown) {
+          setDropdownType("master");
+          calcDropdownPos(masterRef.current);
+          setShowMasterDropdown(true);
+          setShowTrackingDropdown(false);
+        } else {
+          setShowMasterDropdown(false);
+        }
+      }
+      return;
+    }
+
+    if (type === "tracking") {
+      if (open) {
+        if (isTrackingActive) {
+          setTrackingOpen(true);
+          return;
+        }
+
+        setTrackingOpen((v) => !v);
+      } else if (isDesktop) {
+        if (!showTrackingDropdown) {
+          setDropdownType("tracking");
+          calcDropdownPos(trackingRef.current);
+          setShowTrackingDropdown(true);
+          setShowMasterDropdown(false);
+        } else {
+          setShowTrackingDropdown(false);
+        }
+      }
+      return;
+    }
+
+    if (type === "report") {
+      if (open) {
+        if (isReportActive) {
+          setReportOpen(true);
+          return;
+        }
+
+        setReportOpen((v) => !v);
+      } else if (isDesktop) {
+        if (!showReportDropdown) {
+          setDropdownType("report");
+          calcDropdownPos(reportRef.current);
+          setShowReportDropdown(true);
+          setShowMasterDropdown(false);
+          setShowTrackingDropdown(false);
+        } else {
+          setShowReportDropdown(false);
+        }
       }
     }
   };
 
+  const activeDropdownItems =
+    dropdownType === "master"
+      ? masterChildren
+      : dropdownType === "tracking"
+        ? trackingChildren
+        : reportChildren;
+
+  const activeDropdownLabel =
+    dropdownType === "master"
+      ? "Master"
+      : dropdownType === "tracking"
+        ? "Barang"
+        : "Laporan";
+
   return (
     <>
-      {/* ── Mobile Overlay ── */}
       {open && (
         <div
           className="sb-overlay fixed inset-0 z-20 lg:hidden"
@@ -329,47 +289,57 @@ function Sidebar({ open, onClose, profile }) {
         />
       )}
 
-      {/* ── Floating Dropdown Portal ──
-           Rendered outside the sidebar <aside> so it's never clipped */}
-      {showMasterDropdown && !open && isDesktop && (
+      {(showMasterDropdown || showTrackingDropdown || showReportDropdown) && !open && isDesktop && (
         <div
           ref={dropdownRef}
           className="sb-dropdown"
           style={{ top: dropdownPos.top, left: dropdownPos.left }}
         >
-          {/* Header */}
           <div className="sb-dropdown-header">
-            <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.3)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
-              Master
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.3)",
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
+              {activeDropdownLabel}
             </span>
           </div>
 
-          {/* Items */}
-          {masterChildren.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                onClick={() => setShowMasterDropdown(false)}
-                className={({ isActive }) =>
-                  `sb-dropdown-item${isActive ? " active" : ""}`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon
-                      size={15}
-                      style={{ flexShrink: 0, color: isActive ? "#60a5fa" : "rgba(255,255,255,0.4)" }}
-                    />
-                    <span>{label}</span>
-                    <span className="sb-dd-dot" />
-                  </>
-                )}
-              </NavLink>
-            ))}
+          {activeDropdownItems.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={() => {
+                setShowMasterDropdown(false);
+                setShowTrackingDropdown(false);
+                setShowReportDropdown(false);
+              }}
+              className={({ isActive }) =>
+                `sb-dropdown-item${isActive ? " active" : ""}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    size={15}
+                    style={{
+                      flexShrink: 0,
+                      color: isActive ? "#60a5fa" : "rgba(255,255,255,0.4)",
+                    }}
+                  />
+                  <span>{label}</span>
+                  <span className="sb-dd-dot" />
+                </>
+              )}
+            </NavLink>
+          ))}
         </div>
       )}
 
-      {/* ── Sidebar Panel ── */}
       <aside
         className={[
           "sb-panel fixed lg:static h-full flex flex-col z-30",
@@ -386,12 +356,9 @@ function Sidebar({ open, onClose, profile }) {
           minWidth: 0,
         }}
       >
-        {/* Fixed-width inner so text doesn't wrap while panel resizes */}
         <div className="flex flex-col h-full" style={{ width: 256 }}>
-
-          {/* ── Logo ── */}
           <div
-            className="flex items-center gap-3 h-16 px-4 flex-shrink-0 relative"
+            className="flex items-center gap-3 h-16 px-4 shrink-0 relative"
             style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
           >
             <div
@@ -403,7 +370,7 @@ function Sidebar({ open, onClose, profile }) {
             />
 
             <div
-              className="sb-logo-glow w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+              className="sb-logo-glow w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
               style={{ background: "linear-gradient(135deg,#3b82f6,#10b981)" }}
             >
               <MdGridView size={18} className="text-white" />
@@ -423,13 +390,12 @@ function Sidebar({ open, onClose, profile }) {
 
             <button
               onClick={onClose}
-              className="sb-label lg:hidden w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+              className="sb-label lg:hidden w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
             >
               <MdClose size={15} />
             </button>
           </div>
 
-          {/* ── Navigation ── */}
           <nav className="sb-scroll flex-1 overflow-y-auto py-4 px-3">
             {navItems.map((group) => (
               <div key={group.group} className="mb-6">
@@ -441,44 +407,61 @@ function Sidebar({ open, onClose, profile }) {
                 </p>
 
                 {group.items.map(({ to, label, icon: Icon, children }) => {
-                  /* ── Accordion / Dropdown trigger ── */
                   if (children?.length) {
+                    const isMasterItem = label === "Master";
+                    const isTrackingItem = label === "Barang";
+                    const isReportItem = label === "Laporan";
+                    const isActive =
+                      (isMasterItem && isMasterActive) ||
+                      (isTrackingItem && isTrackingActive) ||
+                      (isReportItem && isReportActive);
+                    const isExpanded =
+                      (isMasterItem && masterOpen) ||
+                      (isTrackingItem && trackingOpen) ||
+                      (isReportItem && reportOpen);
+
                     return (
                       <div key={label} className="mb-1">
                         <button
-                          ref={masterRef}
+                          ref={isMasterItem ? masterRef : isTrackingItem ? trackingRef : reportRef}
                           type="button"
-                          onClick={handleMasterClick}
+                          onClick={() =>
+                            handleParentClick(
+                              isMasterItem ? "master" : isTrackingItem ? "tracking" : "report"
+                            )
+                          }
                           className="sb-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors duration-200"
-                          style={isMasterActive ? activeStyle : idleStyle}
+                          style={isActive ? activeStyle : idleStyle}
                           title={!open ? label : undefined}
-                          aria-expanded={open ? masterOpen : showMasterDropdown}
+                          aria-expanded={
+                            open
+                              ? isExpanded
+                              : showMasterDropdown || showTrackingDropdown || showReportDropdown
+                          }
                         >
                           <Icon
                             size={18}
-                            className={`flex-shrink-0 ${isMasterActive ? "text-white" : "text-gray-400"}`}
+                            className={`shrink-0 ${isActive ? "text-white" : "text-gray-400"}`}
                           />
                           <span
                             className={`sb-label text-sm font-semibold flex-1 text-left ${
-                              isMasterActive ? "text-white" : "text-gray-400"
+                              isActive ? "text-white" : "text-gray-400"
                             }`}
                           >
                             {label}
                           </span>
-                          {/* Chevron — only visible when sidebar open */}
                           <MdExpandMore
                             size={16}
                             className={`sb-chevron ${
-                              isMasterActive ? "text-white" : "text-gray-500"
-                            } ${masterOpen ? "" : "rotated"}`}
+                              isActive ? "text-white" : "text-gray-500"
+                            } ${isExpanded ? "" : "rotated"}`}
                           />
                         </button>
 
-                        {/* ── In-place accordion (sidebar open) ── */}
                         {open && (
                           <div
                             className={`sb-children ${
-                              masterOpen ? "expanded" : "collapsed"
+                              isExpanded ? "expanded" : "collapsed"
                             }`}
                           >
                             <div>
@@ -488,52 +471,59 @@ function Sidebar({ open, onClose, profile }) {
                                   borderLeft: "1px solid rgba(59,130,246,0.18)",
                                 }}
                               >
-                                {children.map(({ to: cTo, label: cLabel, icon: CIcon }) => (
-                                  <NavLink
-                                    key={cTo}
-                                    to={cTo}
-                                    className="sb-link flex items-center gap-2.5 px-3 py-2 rounded-lg mb-0.5 transition-colors duration-200"
-                                    style={({ isActive }) =>
-                                      isActive ? activeStyle : idleStyle
-                                    }
-                                    onMouseEnter={(e) => {
-                                      if (
-                                        e.currentTarget.getAttribute("aria-current") !== "page"
-                                      )
-                                        e.currentTarget.style.background =
-                                          "rgba(255,255,255,0.04)";
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      if (
-                                        e.currentTarget.getAttribute("aria-current") !== "page"
-                                      )
-                                        e.currentTarget.style.background = "transparent";
-                                    }}
-                                  >
-                                    {({ isActive }) => (
-                                      <>
-                                        <CIcon
-                                          size={15}
-                                          className={`flex-shrink-0 ${
-                                            isActive ? "text-blue-300" : "text-gray-500"
-                                          }`}
-                                        />
-                                        <span
-                                          className={`sb-label text-sm ${
-                                            isActive
-                                              ? "text-white font-semibold"
-                                              : "text-gray-400"
-                                          }`}
-                                        >
-                                          {cLabel}
-                                        </span>
-                                        {isActive && (
-                                          <span className="sb-dot ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                                        )}
-                                      </>
-                                    )}
-                                  </NavLink>
-                                ))}
+                                {children.map(
+                                  ({ to: cTo, label: cLabel, icon: CIcon }) => (
+                                    <NavLink
+                                      key={cTo}
+                                      to={cTo}
+                                      className="sb-link flex items-center gap-2.5 px-3 py-2 rounded-lg mb-0.5 transition-colors duration-200"
+                                      style={({ isActive }) =>
+                                        isActive ? activeStyle : idleStyle
+                                      }
+                                      onMouseEnter={(e) => {
+                                        if (
+                                          e.currentTarget.getAttribute("aria-current") !==
+                                          "page"
+                                        ) {
+                                          e.currentTarget.style.background =
+                                            "rgba(255,255,255,0.04)";
+                                        }
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        if (
+                                          e.currentTarget.getAttribute("aria-current") !==
+                                          "page"
+                                        ) {
+                                          e.currentTarget.style.background =
+                                            "transparent";
+                                        }
+                                      }}
+                                    >
+                                      {({ isActive }) => (
+                                        <>
+                                          <CIcon
+                                            size={15}
+                                            className={`shrink-0 ${
+                                              isActive ? "text-blue-300" : "text-gray-500"
+                                            }`}
+                                          />
+                                          <span
+                                            className={`sb-label text-sm ${
+                                              isActive
+                                                ? "text-white font-semibold"
+                                                : "text-gray-400"
+                                            }`}
+                                          >
+                                            {cLabel}
+                                          </span>
+                                          {isActive && (
+                                            <span className="sb-dot ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                                          )}
+                                        </>
+                                      )}
+                                    </NavLink>
+                                  )
+                                )}
                               </div>
                             </div>
                           </div>
@@ -542,7 +532,6 @@ function Sidebar({ open, onClose, profile }) {
                     );
                   }
 
-                  /* ── Regular link ── */
                   return (
                     <NavLink
                       key={to}
@@ -563,7 +552,7 @@ function Sidebar({ open, onClose, profile }) {
                         <>
                           <Icon
                             size={18}
-                            className={`flex-shrink-0 ${
+                            className={`shrink-0 ${
                               isActive ? "text-white" : "text-gray-400"
                             }`}
                           />
@@ -575,7 +564,7 @@ function Sidebar({ open, onClose, profile }) {
                             {label}
                           </span>
                           {isActive && (
-                            <span className="sb-dot ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                            <span className="sb-dot ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
                           )}
                         </>
                       )}
@@ -586,10 +575,9 @@ function Sidebar({ open, onClose, profile }) {
             ))}
           </nav>
 
-          {/* ── Profile ── */}
           {profile && (
             <div
-              className="flex-shrink-0 p-3"
+              className="shrink-0 p-3"
               style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
             >
               <div
@@ -608,7 +596,7 @@ function Sidebar({ open, onClose, profile }) {
                 }}
               >
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0"
                   style={{
                     background: "linear-gradient(135deg,#3b82f6,#10b981)",
                     boxShadow: "0 2px 8px rgba(59,130,246,0.4)",
@@ -625,7 +613,7 @@ function Sidebar({ open, onClose, profile }) {
                   </div>
                 </div>
                 <span
-                  className="flex-shrink-0 w-2 h-2 rounded-full"
+                  className="shrink-0 w-2 h-2 rounded-full"
                   style={{
                     background: "#10b981",
                     boxShadow: "0 0 6px rgba(16,185,129,0.6)",
